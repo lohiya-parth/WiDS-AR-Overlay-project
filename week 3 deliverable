@@ -1,0 +1,126 @@
+# =============================================
+# Week 3: Live Webcam AR Overlay using MediaPipe
+# =============================================
+
+import cv2
+import mediapipe as mp
+import numpy as np
+from PIL import Image
+import os
+
+# ===============================
+# User Inputs
+# ===============================
+overlay_path = input("Enter path to overlay image (PNG with transparency): ")
+
+if not os.path.exists(overlay_path):
+    raise FileNotFoundError(f"Overlay image not found: {overlay_path}")
+
+overlay_pil = Image.open(overlay_path).convert("RGBA")
+overlay_np = np.array(overlay_pil)
+
+# Resize overlay for webcam
+overlay_width_default = 100
+overlay_height_default = int(overlay_width_default * overlay_np.shape[0] / overlay_np.shape[1])
+overlay_resized = cv2.resize(overlay_np, (overlay_width_default, overlay_height_default))
+
+# ===============================
+# Initialize Webcam
+# ===============================
+cap = cv2.VideoCapture(0)  # default webcam
+if not cap.isOpened():
+    raise IOError("Cannot access webcam.")
+
+# ===============================
+# Initialize MediaPipe Face Mesh
+# ===============================
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
+# Default overlay position: nose
+position_mode = 'nose'
+
+# ===============================
+# Landmark indices for positions
+# ===============================
+landmark_dict = {
+    'forehead': 10,  # forehead approx
+    'nose': 1,       # nose tip
+    'mouth': 13      # upper lip center
+}
+
+print("Press 1=Forehead, 2=Nose, 3=Mouth, q=Quit")
+
+# ===============================
+# Main Loop
+# ===============================
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    h, w, _ = frame.shape
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb_frame)
+
+    if results.multi_face_landmarks:
+        face_landmarks = results.multi_face_landmarks[0]
+
+        # Select landmark
+        idx = landmark_dict[position_mode]
+        lm = face_landmarks.landmark[idx]
+
+        x_center = int(lm.x * w)
+        y_center = int(lm.y * h)
+
+        # Overlay top-left coordinates
+        x_offset = x_center - overlay_width_default // 2
+        y_offset = y_center - overlay_height_default // 2
+
+        # Clip to frame boundaries
+        x1 = max(x_offset, 0)
+        y1 = max(y_offset, 0)
+        x2 = min(x_offset + overlay_width_default, w)
+        y2 = min(y_offset + overlay_height_default, h)
+
+        x1_overlay = 0 if x_offset >= 0 else abs(x_offset)
+        y1_overlay = 0 if y_offset >= 0 else abs(y_offset)
+        x2_overlay = overlay_width_default - max(0, (x_offset + overlay_width_default - w))
+        y2_overlay = overlay_height_default - max(0, (y_offset + overlay_height_default - h))
+
+        # Alpha blending
+        alpha_overlay = overlay_resized[y1_overlay:y2_overlay, x1_overlay:x2_overlay, 3] / 255.0
+        alpha_frame = 1.0 - alpha_overlay
+
+        for c in range(3):
+            frame[y1:y2, x1:x2, c] = (
+                alpha_overlay * overlay_resized[y1_overlay:y2_overlay, x1_overlay:x2_overlay, c] +
+                alpha_frame * frame[y1:y2, x1:x2, c]
+            )
+
+    # Display
+    cv2.imshow("Webcam AR Overlay", frame)
+
+    # Keyboard input
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('1'):
+        position_mode = 'forehead'
+    elif key == ord('2'):
+        position_mode = 'nose'
+    elif key == ord('3'):
+        position_mode = 'mouth'
+    elif key == ord('q'):
+        break
+
+# ===============================
+# Cleanup
+# ===============================
+cap.release()
+cv2.destroyAllWindows()
+face_mesh.close()
+print("Webcam closed. Script ended.")
