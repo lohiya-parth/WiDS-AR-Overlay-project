@@ -51,5 +51,22 @@ distance between the eyes, providing realistic placement.
 - Smooth alpha blending for seamless integration
 - Display video in real-time and save processed output
 
+# Week 3: Live Webcam AR Overlay using MediaPipe
+
+This project demonstrates a **real-time AR overlay** on a live webcam feed using **MediaPipe Face Mesh** and **OpenCV**.  
+Users can dynamically place an overlay image (PNG with transparency) on the forehead, nose, or mouth.
+
+---
+
+## Features
+
+- Real-time face landmark detection
+- Overlay image follows selected facial landmark
+- Alpha blending for smooth integration
+- Dynamic overlay position switching:
+  - **1** → Forehead
+  - **2** → Nose
+  - **3** → Mouth
+- Press **q** to quit the webcam feed
 
 
