@@ -1,0 +1,18 @@
+# Image Processing using OpenCV and Pillow
+
+This project demonstrates basic image processing operations in Python
+using Pillow, NumPy, and OpenCV.
+
+## Features
+- Load images using Pillow
+- Convert Pillow images to OpenCV format
+- RGB to BGR color conversion
+- Image resizing
+- Image sharpening using convolution
+
+## Requirements
+- Python 3.x
+
+Install dependencies using:
+```bash
+pip install -r requirements.txt
