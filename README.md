@@ -34,17 +34,22 @@ It allows you to extract a person (foreground) from an image and overlay them on
 - Overlay foreground onto a new background at a custom position
 - Display and save the final composite image
 
+
+# Week 2: Face Landmark Overlay using MediaPipe
+
+This project overlays a custom image (PNG with transparency) onto a person's face in a video
+using **MediaPipe Face Mesh** and **OpenCV**. The overlay scales dynamically based on the
+distance between the eyes, providing realistic placement.
+
 ---
 
-## Requirements
+## Features
 
-- Python 3.x
-- Libraries:
-  - OpenCV
-  - NumPy
-  - Pillow
+- Detect facial landmarks in a video
+- Dynamically position overlay based on eye landmarks
+- Resize overlay proportionally
+- Smooth alpha blending for seamless integration
+- Display video in real-time and save processed output
 
-Install dependencies using:
 
-```bash
-pip install -r requirements.txt
+
