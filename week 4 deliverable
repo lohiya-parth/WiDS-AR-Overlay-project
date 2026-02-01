@@ -1,0 +1,155 @@
+import cv2
+import mediapipe as mp
+import numpy as np
+from PIL import Image
+
+# ===============================
+# User Inputs
+# ===============================
+overlay_path = input("Enter path to overlay image (PNG): ")
+overlay_pil = Image.open(overlay_path).convert("RGBA")
+overlay_np = np.array(overlay_pil)
+
+# ===============================
+# Background Removal (simple white background removal)
+# ===============================
+# Assume white background: threshold
+def remove_white_bg(img_rgba):
+    img = img_rgba.copy()
+    # Mask where RGB values are near white
+    mask = np.all(img[:, :, :3] > 240, axis=2)  # threshold for white
+    img[mask] = [0, 0, 0, 0]  # make transparent
+    return img
+
+overlay_np = remove_white_bg(overlay_np)
+
+# ===============================
+# Initialize Webcam
+# ===============================
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Cannot open webcam")
+    exit()
+
+# ===============================
+# MediaPipe Face Mesh
+# ===============================
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
+# ===============================
+# Landmark dictionary for placements
+# ===============================
+placement_dict = {
+    'head': 10,        # top of head / forehead approx
+    'forehead': 10,
+    'eyes': 168,       # midpoint between eyes
+    'nose': 1,         # tip of nose
+    'mouth': 13,       # upper lip center
+    'chin': 152,       # chin tip
+    'both_cheeks': 234 # approx left cheek
+}
+
+# Default placement
+current_placement = 'nose'
+
+# Mapping for keyboard inputs
+key_placement_map = {
+    ord('1'): 'head',
+    ord('2'): 'forehead',
+    ord('3'): 'eyes',
+    ord('4'): 'nose',
+    ord('5'): 'mouth',
+    ord('6'): 'chin',
+    ord('7'): 'both_cheeks'
+}
+
+print("Press keys 1-7 to change overlay placement, q to quit")
+print("1=head, 2=forehead, 3=eyes, 4=nose, 5=mouth, 6=chin, 7=both_cheeks")
+
+# ===============================
+# Placement scaling (width in pixels)
+# ===============================
+placement_scale = {
+    'head': 200,
+    'forehead': 150,
+    'eyes': 120,
+    'nose': 100,
+    'mouth': 100,
+    'chin': 120,
+    'both_cheeks': 80
+}
+
+# ===============================
+# Main Loop
+# ===============================
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    h, w, _ = frame.shape
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb_frame)
+
+    if results.multi_face_landmarks:
+        face_landmarks = results.multi_face_landmarks[0]
+
+        # Landmark index for current placement
+        lm_idx = placement_dict[current_placement]
+        lm = face_landmarks.landmark[lm_idx]
+        x_center = int(lm.x * w)
+        y_center = int(lm.y * h)
+
+        # Resize overlay according to placement
+        overlay_width = placement_scale[current_placement]
+        overlay_height = int(overlay_width * overlay_np.shape[0] / overlay_np.shape[1])
+        resized_overlay = cv2.resize(overlay_np, (overlay_width, overlay_height))
+
+        # Overlay position (centered)
+        x_offset = x_center - overlay_width // 2
+        y_offset = y_center - overlay_height // 2
+
+        # Clip to frame
+        x1 = max(x_offset, 0)
+        y1 = max(y_offset, 0)
+        x2 = min(x_offset + overlay_width, w)
+        y2 = min(y_offset + overlay_height, h)
+
+        x1_overlay = 0 if x_offset >= 0 else abs(x_offset)
+        y1_overlay = 0 if y_offset >= 0 else abs(y_offset)
+        x2_overlay = overlay_width - max(0, (x_offset + overlay_width - w))
+        y2_overlay = overlay_height - max(0, (y_offset + overlay_height - h))
+
+        # Alpha blending
+        alpha_overlay = resized_overlay[y1_overlay:y2_overlay, x1_overlay:x2_overlay, 3] / 255.0
+        alpha_frame = 1.0 - alpha_overlay
+
+        for c in range(3):
+            frame[y1:y2, x1:x2, c] = (
+                alpha_overlay * resized_overlay[y1_overlay:y2_overlay, x1_overlay:x2_overlay, c] +
+                alpha_frame * frame[y1:y2, x1:x2, c]
+            )
+
+    # Display frame
+    cv2.imshow("AR Overlay System", frame)
+
+    # Keyboard input
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
+    elif key in key_placement_map:
+        current_placement = key_placement_map[key]
+
+# ===============================
+# Cleanup
+# ===============================
+cap.release()
+cv2.destroyAllWindows()
+face_mesh.close()
+print("AR Overlay session ended.")
