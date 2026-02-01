@@ -1,0 +1,125 @@
+# =============================================
+# Week 2: Face Landmark Overlay using MediaPipe
+# =============================================
+
+import cv2
+import mediapipe as mp
+import numpy as np
+from PIL import Image
+import os
+
+# ===============================
+# User-defined paths
+# ===============================
+video_path = input("Enter path to input video (e.g., face_video.mp4): ")
+overlay_path = input("Enter path to overlay image (PNG with transparency): ")
+output_video_path = "output_video.mp4"
+
+# Check if files exist
+if not os.path.exists(video_path):
+    raise FileNotFoundError(f"Video file not found: {video_path}")
+if not os.path.exists(overlay_path):
+    raise FileNotFoundError(f"Overlay image not found: {overlay_path}")
+
+# ===============================
+# Load Overlay Image
+# ===============================
+overlay_pil = Image.open(overlay_path).convert("RGBA")
+overlay_np = np.array(overlay_pil)
+
+# ===============================
+# Open Video
+# ===============================
+cap = cv2.VideoCapture(video_path)
+if not cap.isOpened():
+    raise IOError("Cannot open video file.")
+
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+# Prepare VideoWriter
+out = cv2.VideoWriter(output_video_path,
+                      cv2.VideoWriter_fourcc(*'mp4v'),
+                      fps, (frame_width, frame_height))
+
+# ===============================
+# Initialize MediaPipe Face Mesh
+# ===============================
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False,
+                                  max_num_faces=1,
+                                  min_detection_confidence=0.5,
+                                  min_tracking_confidence=0.5)
+
+# ===============================
+# Process Video Frames
+# ===============================
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb_frame)
+
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            h, w, _ = frame.shape
+
+            # Landmarks for left and right eyes
+            left_eye = face_landmarks.landmark[33]
+            right_eye = face_landmarks.landmark[263]
+
+            x1 = int(left_eye.x * w)
+            y1 = int(left_eye.y * h)
+            x2 = int(right_eye.x * w)
+            y2 = int(right_eye.y * h)
+
+            # Compute overlay size
+            overlay_width = x2 - x1
+            overlay_height = int(overlay_width * overlay_np.shape[0] / overlay_np.shape[1])
+
+            resized_overlay = cv2.resize(overlay_np, (overlay_width, overlay_height))
+
+            # Overlay position
+            y_offset = y1 - overlay_height // 2
+            x_offset = x1
+
+            # Clip to frame boundaries
+            y1_frame = max(y_offset, 0)
+            y2_frame = min(y_offset + overlay_height, h)
+            x1_frame = max(x_offset, 0)
+            x2_frame = min(x_offset + overlay_width, w)
+
+            y1_overlay = 0 if y_offset >= 0 else abs(y_offset)
+            y2_overlay = overlay_height - max(0, (y_offset + overlay_height) - h)
+            x1_overlay = 0 if x_offset >= 0 else abs(x_offset)
+            x2_overlay = overlay_width - max(0, (x_offset + overlay_width) - w)
+
+            # Alpha blending
+            alpha_overlay = resized_overlay[y1_overlay:y2_overlay, x1_overlay:x2_overlay, 3] / 255.0
+            alpha_frame = 1.0 - alpha_overlay
+
+            for c in range(3):
+                frame[y1_frame:y2_frame, x1_frame:x2_frame, c] = (
+                    alpha_overlay * resized_overlay[y1_overlay:y2_overlay, x1_overlay:x2_overlay, c] +
+                    alpha_frame * frame[y1_frame:y2_frame, x1_frame:x2_frame, c]
+                )
+
+    # Display
+    cv2.imshow('Face Landmark Overlay', frame)
+    out.write(frame)
+
+    # Quit on 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# ===============================
+# Cleanup
+# ===============================
+cap.release()
+out.release()
+cv2.destroyAllWindows()
+face_mesh.close()
+print(f"Final video saved as {output_video_path}")
