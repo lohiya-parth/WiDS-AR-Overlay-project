@@ -15,10 +15,6 @@ using Pillow, NumPy, and OpenCV.
 ## Requirements
 - Python 3.x
 
-Install dependencies using:
-```bash
-pip install -r requirements.txt
-
 Week 1: Background Manipulation using GrabCut
 
 This project demonstrates **background removal and replacement** using Python and OpenCV's **GrabCut** algorithm.  
