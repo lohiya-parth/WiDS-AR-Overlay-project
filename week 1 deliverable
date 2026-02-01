@@ -1,0 +1,75 @@
+# ===============================
+# Background Replacement Program
+# ===============================
+
+import cv2
+import numpy as np
+from PIL import Image
+import os
+
+# -------------------------------
+# Step 1: Load Images
+# -------------------------------
+foreground_path = input("Enter path to foreground image (person): ")
+background_path = input("Enter path to background image: ")
+
+if not os.path.exists(foreground_path):
+    raise FileNotFoundError(f"Foreground image not found: {foreground_path}")
+if not os.path.exists(background_path):
+    raise FileNotFoundError(f"Background image not found: {background_path}")
+
+# Load images
+fg_pil = Image.open(foreground_path)
+fg = np.array(fg_pil)
+
+bg_pil = Image.open(background_path)
+bg = np.array(bg_pil)
+
+print("Foreground shape:", fg.shape)
+print("Background shape:", bg.shape)
+
+# -------------------------------
+# Step 2: Background Removal using GrabCut
+# -------------------------------
+mask = np.zeros(fg.shape[:2], np.uint8)
+bgdModel = np.zeros((1, 65), np.float64)
+fgdModel = np.zeros((1, 65), np.float64)
+
+height, width = fg.shape[:2]
+rect = (20, 20, width - 40, height - 40)
+
+cv2.grabCut(fg, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
+
+mask_binary = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1, 0).astype("uint8")
+extracted_fg = fg * mask_binary[:, :, np.newaxis]
+
+# -------------------------------
+# Step 3: Resize Extracted Object
+# -------------------------------
+new_width = 200
+new_height = 300
+
+extracted_fg_resized = cv2.resize(extracted_fg, (new_width, new_height))
+mask_resized = cv2.resize(mask_binary, (new_width, new_height))
+
+# -------------------------------
+# Step 4: Overlay on New Background
+# -------------------------------
+x, y = 100, 150  # placement on background
+roi = bg[y:y+new_height, x:x+new_width]
+
+for c in range(3):
+    roi[:, :, c] = roi[:, :, c] * (1 - mask_resized) + extracted_fg_resized[:, :, c] * mask_resized
+
+bg[y:y+new_height, x:x+new_width] = roi
+
+# -------------------------------
+# Step 5: Display & Save
+# -------------------------------
+print("Final Output:")
+cv2.imshow("Background Replacement Result", bg)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+cv2.imwrite("final_composite.jpg", bg)
+print("Saved as final_composite.jpg")
